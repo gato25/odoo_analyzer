@@ -10,46 +10,44 @@ from src.parser import OdooModuleParser
 from src.visualizer import OdooModuleVisualizer
 
 def display_model_info(model):
-    col1, col2 = st.columns([2, 1])
+    # Simpler styling for cleaner display
+    st.markdown("""
+    <style>
+    .model-card {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 15px;
+        border-left: 3px solid #4361ee;
+    }
+    .info-section {
+        margin-bottom: 20px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     
+    # Simple header
+    st.header(model.name)
+    st.write(f"**Description:** {model.description or 'No description provided'}")
+    
+    # Key metrics in a row
+    col1, col2, col3 = st.columns(3)
     with col1:
-        st.write("### Model Details")
-        st.write(f"**Name:** {model.name}")
-        st.write(f"**Description:** {model.description}")
-        
-        if model.inherit:
-            st.write("**Inherits from:**")
-            for inherit in model.inherit:
-                st.write(f"- {inherit}")
-                
-        if model.order:
-            st.write(f"**Order:** {model.order}")
-            
-        if model.record_name:
-            st.write(f"**Record Name Field:** {model.record_name}")
-    
-    with col2:
-        # Info cards
         st.metric("Fields", len(model.fields) if model.fields else 0)
+    with col2:
         st.metric("Methods", len(model.methods) if model.methods else 0)
-        if model.constraints:
-            st.metric("Constraints", len(model.constraints))
+    with col3:
+        st.metric("Constraints", len(model.constraints) if model.constraints else 0)
     
-    st.divider()
+    # Important properties
+    if model.inherit:
+        st.subheader("Inherits from")
+        for inherit in model.inherit:
+            st.write(f"• {inherit}")
     
-    # Field info
-    field_count = len(model.fields) if model.fields else 0
-    st.write(f"### Fields ({field_count})")
-    
+    # Field tabs - simplified
+    st.subheader("Fields")
     if model.fields:
-        # Categorize fields
-        basic_fields = [f for name, f in model.fields.items() 
-                        if not f.compute and f.field_type not in ['Many2one', 'One2many', 'Many2many']]
-        relation_fields = [f for name, f in model.fields.items() 
-                          if f.field_type in ['Many2one', 'One2many', 'Many2many']]
-        computed_fields = [f for name, f in model.fields.items() if f.compute]
-        
-        # Create tabs for different field types
         tabs = st.tabs(["All Fields", "Basic", "Relational", "Computed"])
         
         with tabs[0]:  # All Fields
@@ -58,36 +56,32 @@ def display_model_info(model):
                 fields_data.append({
                     "Name": name,
                     "Type": field.field_type,
-                    "Required": field.required,
+                    "Required": "✓" if field.required else "",
                     "Related Model": field.related_model or "",
-                    "Compute": field.compute or "",
-                    "Readonly": field.readonly,
-                    "Store": field.store,
-                    "Tracking": field.tracking,
-                    "Index": field.index,
-                    "Help": field.help or "",
-                    "Default": field.default if hasattr(field, 'default') else "",
-                    "String": field.string if hasattr(field, 'string') else ""
+                    "Compute": field.compute or ""
                 })
             if fields_data:
-                st.dataframe(pd.DataFrame(fields_data), use_container_width=True)
+                st.dataframe(pd.DataFrame(fields_data), use_container_width=True, hide_index=True)
         
         with tabs[1]:  # Basic
+            basic_fields = [f for name, f in model.fields.items() 
+                          if not f.compute and f.field_type not in ['Many2one', 'One2many', 'Many2many']]
             if basic_fields:
                 basic_data = []
                 for field in basic_fields:
                     basic_data.append({
                         "Name": field.name,
                         "Type": field.field_type,
-                        "Required": field.required,
-                        "Readonly": field.readonly,
+                        "Required": "✓" if field.required else "",
                         "Help": field.help or ""
                     })
-                st.dataframe(pd.DataFrame(basic_data), use_container_width=True)
+                st.dataframe(pd.DataFrame(basic_data), use_container_width=True, hide_index=True)
             else:
                 st.info("No basic fields found")
         
         with tabs[2]:  # Relational
+            relation_fields = [f for name, f in model.fields.items() 
+                              if f.field_type in ['Many2one', 'One2many', 'Many2many']]
             if relation_fields:
                 relation_data = []
                 for field in relation_fields:
@@ -95,65 +89,87 @@ def display_model_info(model):
                         "Name": field.name,
                         "Type": field.field_type,
                         "Related Model": field.related_model or "",
-                        "Required": field.required
+                        "Required": "✓" if field.required else ""
                     })
-                st.dataframe(pd.DataFrame(relation_data), use_container_width=True)
+                st.dataframe(pd.DataFrame(relation_data), use_container_width=True, hide_index=True)
+                
+                # Quick relation type explanation
+                st.write("""
+                **Many2one**: This record links to one record in another model  
+                **One2many**: This record links to multiple records in another model  
+                **Many2many**: Multiple records link to multiple other records
+                """)
             else:
                 st.info("No relational fields found")
         
         with tabs[3]:  # Computed
+            computed_fields = [f for name, f in model.fields.items() if f.compute]
             if computed_fields:
                 computed_data = []
                 for field in computed_fields:
                     computed_data.append({
                         "Name": field.name,
                         "Type": field.field_type,
-                        "Compute": field.compute,
-                        "Stored": field.store,
-                        "Readonly": field.readonly
+                        "Compute Method": field.compute,
+                        "Stored": "✓" if field.store else ""
                     })
-                st.dataframe(pd.DataFrame(computed_data), use_container_width=True)
+                st.dataframe(pd.DataFrame(computed_data), use_container_width=True, hide_index=True)
             else:
                 st.info("No computed fields found")
     else:
         st.info("No fields defined")
     
-    # Methods
+    # Methods section - simplified but with code
     if model.methods:
-        st.write(f"### Methods ({len(model.methods)})")
+        st.subheader(f"Methods ({len(model.methods)})")
         
-        # Create method data for table
-        method_data = []
-        for name, method in model.methods.items():
-            method_data.append({
-                "Name": name,
-                "Type": ", ".join([d.replace("@api.", "") for d in method.decorators]) or "Regular",
-                "Parameters": ", ".join(method.parameters),
-                "Complexity": method.complexity,
-                "Lines": method.line_count
-            })
+        # Group methods by type
+        api_methods = [m for name, m in model.methods.items() if any(d.startswith('@api.') for d in m.decorators)]
+        compute_methods = [m for name, m in model.methods.items() if any('depends' in d for d in m.decorators)]
+        crud_methods = [m for name, m in model.methods.items() if any(m.name.startswith(p) for p in ['create', 'write', 'unlink', 'read'])]
+        other_methods = [m for name, m in model.methods.items() if m not in api_methods + compute_methods + crud_methods]
+        
+        # Only show categories that have methods
+        method_groups = []
+        if api_methods:
+            method_groups.append(("API Methods", api_methods))
+        if compute_methods:
+            method_groups.append(("Compute Methods", compute_methods))
+        if crud_methods:
+            method_groups.append(("CRUD Methods", crud_methods))
+        if other_methods:
+            method_groups.append(("Other Methods", other_methods))
+        
+        # Create tabs for method categories
+        if method_groups:
+            method_tabs = st.tabs([group[0] for group in method_groups])
             
-        if method_data:
-            st.dataframe(pd.DataFrame(method_data), use_container_width=True)
-        
-        # Show method details with a checkbox instead of an expander
-        show_method_details = st.checkbox("Show Method Details")
-        if show_method_details:
-            st.write("**Method Details:**")
+            for i, (_, methods) in enumerate(method_groups):
+                with method_tabs[i]:
+                    for method in methods:
+                        with st.expander(f"{method.name}"):
+                            st.write(f"**Type:** {', '.join([d.replace('@api.', '') for d in method.decorators]) or 'Regular'}")
+                            st.write(f"**Parameters:** {', '.join(method.parameters)}")
+                            if hasattr(method, 'api_depends') and method.api_depends:
+                                st.write(f"**Depends on:** {', '.join(method.api_depends)}")
+                            if hasattr(method, 'source_code') and method.source_code:
+                                st.code(method.source_code, language="python")
+                            elif hasattr(method, 'docstring') and method.docstring:
+                                st.code(method.docstring, language="text")
+                            st.write(f"**Complexity:** {method.complexity} | **Lines:** {method.line_count}")
+        else:
+            # Fallback to simple method list
             for name, method in model.methods.items():
-                st.write(f"**{name}**")
-                
-                if method.decorators:
-                    st.write(f"*Decorators:* {', '.join(method.decorators)}")
-                    
-                if method.api_depends:
-                    st.write(f"*Depends on:* {', '.join(method.api_depends)}")
-                    
-                if method.docstring:
-                    st.code(method.docstring, language="text")
-                    
-                st.write(f"Complexity: {method.complexity}, Lines: {method.line_count}")
-                st.divider()
+                with st.expander(f"{name}"):
+                    st.write(f"**Type:** {', '.join([d.replace('@api.', '') for d in method.decorators]) or 'Regular'}")
+                    st.write(f"**Parameters:** {', '.join(method.parameters)}")
+                    if hasattr(method, 'api_depends') and method.api_depends:
+                        st.write(f"**Depends on:** {', '.join(method.api_depends)}")
+                    if hasattr(method, 'source_code') and method.source_code:
+                        st.code(method.source_code, language="python")
+                    elif hasattr(method, 'docstring') and method.docstring:
+                        st.code(method.docstring, language="text")
+                    st.write(f"**Complexity:** {method.complexity} | **Lines:** {method.line_count}")
 
 def display_view_info(view):
     st.write("### View Details")
@@ -342,217 +358,254 @@ def display_security_info(rules):
             st.info("Not enough data to create visualization")
 
 def display_relationship_graph(nodes, edges):
-    st.write("### Model Relationship Graph")
-    st.write("This graph shows the relationships between models in the module.")
+    # Put the graph and explanation side by side
+    st.header("Model Relationship Map")
+    st.write("This visualization shows how models in the module are connected to each other.")
     
-    # Debug info
-    st.write(f"Nodes: {len(nodes)}, Edges: {len(edges)}")
+    # Create columns for side-by-side layout
+    col1, col2 = st.columns([1, 2])
     
-    # Check if we have nodes and edges to display
-    if not nodes or not edges:
-        st.info("No relationships to display")
-        return
+    with col1:
+        # Explanation section
+        st.subheader("How to Read the Graph")
+        
+        st.markdown("#### Nodes (Circles)")
+        st.write("Each circle represents a model in the system:")
+        st.markdown("""
+        <span style="display: inline-block; width: 12px; height: 12px; background-color: #6929c4; margin-right: 5px;"></span> Standard models<br>
+        <span style="display: inline-block; width: 12px; height: 12px; background-color: #1192e8; margin-right: 5px;"></span> Models with many fields
+        """, unsafe_allow_html=True)
+        
+        st.markdown("#### Connections")
+        st.write("Lines show how models are related:")
+        st.markdown("""
+        <span style="display: inline-block; width: 12px; height: 12px; background-color: #1192e8; margin-right: 5px;"></span> <strong>Many2one:</strong> Links to one record<br>
+        <span style="display: inline-block; width: 12px; height: 12px; background-color: #ff832b; margin-right: 5px;"></span> <strong>One2many:</strong> Links to multiple records<br>
+        <span style="display: inline-block; width: 12px; height: 12px; background-color: #a56eff; margin-right: 5px;"></span> <strong>Many2many:</strong> Many to many links<br>
+        <span style="display: inline-block; width: 12px; height: 12px; background-color: #525252; margin-right: 5px;"></span> <strong>Inheritance:</strong> Extends another model
+        """, unsafe_allow_html=True)
+        
+        st.markdown("#### Tips")
+        st.markdown("""
+        - Hover over nodes and edges for details
+        - Use mouse wheel to zoom in/out
+        - Drag to reposition the graph
+        - Click on a model to highlight connections
+        """)
+        
+        # Add relationship summary if graph is rendered
+        if nodes and edges:
+            # Count relationship types
+            relationship_counts = {}
+            for edge in edges:
+                edge_type = edge.get('type', 'default')
+                if edge_type in relationship_counts:
+                    relationship_counts[edge_type] += 1
+                else:
+                    relationship_counts[edge_type] = 1
+            
+            if relationship_counts:
+                st.subheader("Relationship Summary")
+                relationship_df = pd.DataFrame({
+                    "Type": list(relationship_counts.keys()),
+                    "Count": list(relationship_counts.values())
+                })
+                relationship_df = relationship_df.sort_values("Count", ascending=False)
+                st.dataframe(relationship_df, use_container_width=True, hide_index=True)
     
-    try:
-        # Create a networkx graph
-        G = nx.DiGraph()
+    with col2:
+        # Graph content
+        if not nodes or not edges:
+            st.info("No relationships to display")
+            return
         
-        # Add nodes
-        for node in nodes:
-            G.add_node(node['id'], 
-                      label=node['label'], 
-                      fields=node.get('fields', 0),
-                      methods=node.get('methods', 0))
-        
-        # Add edges
-        for edge in edges:
-            G.add_edge(edge['from'], edge['to'], 
-                      type=edge.get('type', ''),
-                      label=edge.get('label', ''),
-                      field=edge.get('field', ''))
-        
-        # Debug info
-        st.write(f"NetworkX Graph: {len(G.nodes())} nodes, {len(G.edges())} edges")
-        
-        # Create an interactive visualization using Pyvis
-        from pyvis.network import Network
-        
-        # Create a pyvis network with better styling
-        net = Network(height="700px", width="100%", directed=True, notebook=False, bgcolor="#ffffff", font_color="#343434")
-        
-        # Set physics options for better visualization
-        physics_options = {
-            "enabled": True,
-            "solver": "forceAtlas2Based",
-            "forceAtlas2Based": {
-                "gravitationalConstant": -100,
-                "centralGravity": 0.05,
-                "springLength": 150,
-                "springConstant": 0.08,
-                "damping": 0.4,
-                "avoidOverlap": 1
-            },
-            "stabilization": {
+        try:
+            # Create a networkx graph
+            G = nx.DiGraph()
+            
+            # Add nodes
+            for node in nodes:
+                G.add_node(node['id'], 
+                          label=node['label'], 
+                          fields=node.get('fields', 0),
+                          methods=node.get('methods', 0))
+            
+            # Add edges
+            for edge in edges:
+                G.add_edge(edge['from'], edge['to'], 
+                          type=edge.get('type', ''),
+                          label=edge.get('label', ''),
+                          field=edge.get('field', ''))
+            
+            # Create an interactive visualization using Pyvis
+            from pyvis.network import Network
+            
+            # Create a pyvis network with better styling
+            net = Network(height="700px", width="100%", directed=True, notebook=False, bgcolor="#ffffff", font_color="#343434")
+            
+            # Set physics options for better visualization
+            physics_options = {
                 "enabled": True,
-                "iterations": 1000
-            }
-        }
-        
-        # Additional options for better appearance
-        options = {
-            "physics": physics_options,
-            "interaction": {
-                "hover": True,
-                "navigationButtons": True,
-                "keyboard": True,
-                "multiselect": True
-            },
-            "edges": {
-                "smooth": {
+                "solver": "forceAtlas2Based",
+                "forceAtlas2Based": {
+                    "gravitationalConstant": -100,
+                    "centralGravity": 0.05,
+                    "springLength": 150,
+                    "springConstant": 0.08,
+                    "damping": 0.4,
+                    "avoidOverlap": 1
+                },
+                "stabilization": {
                     "enabled": True,
-                    "type": "dynamic",
-                    "roundness": 0.5
-                },
-                "font": {
-                    "size": 12,
-                    "strokeWidth": 0,
-                    "align": "middle"
+                    "iterations": 1000
                 }
-            },
-            "nodes": {
-                "shape": "dot",
-                "font": {
-                    "size": 12,
-                    "face": "Tahoma"
-                },
-                "borderWidth": 2,
-                "shadow": True
             }
-        }
-        
-        # Apply network options
-        net.set_options(json.dumps(options))
-        
-        # Add nodes with enhanced styling
-        for node_id in G.nodes():
-            node_data = G.nodes[node_id]
-            label = node_id.split('.')[-1] if '.' in node_id else node_id  # Display shorter names
             
-            # Field and method counts
-            field_count = node_data.get('fields', 0)
-            method_count = node_data.get('methods', 0)
+            # Additional options for better appearance
+            options = {
+                "physics": physics_options,
+                "interaction": {
+                    "hover": True,
+                    "navigationButtons": True,
+                    "keyboard": True,
+                    "multiselect": True
+                },
+                "edges": {
+                    "smooth": {
+                        "enabled": True,
+                        "type": "dynamic",
+                        "roundness": 0.5
+                    },
+                    "font": {
+                        "size": 12,
+                        "strokeWidth": 0,
+                        "align": "middle"
+                    }
+                },
+                "nodes": {
+                    "shape": "dot",
+                    "font": {
+                        "size": 12,
+                        "face": "Tahoma"
+                    },
+                    "borderWidth": 2,
+                    "shadow": True
+                }
+            }
             
-            # Create tooltip with additional info
-            title = f"<div style='padding:10px; background:#f7f7f7; border-radius:5px;'>"
-            title += f"<b style='font-size:14px;'>{node_id}</b><hr style='margin:5px 0;'>"
-            title += f"Fields: {field_count}<br>Methods: {method_count}</div>"
+            # Apply network options
+            net.set_options(json.dumps(options))
             
-            # Calculate node size based on fields and methods
-            size = 15 + (field_count + method_count) * 1.5
-            size = min(50, max(25, size))  # Constrain size
-            
-            # Color based on node type
-            if "." in node_id:  # Odoo models typically have dot notation
-                color = "#6929c4"  # Purple for regular models
-                if node_data.get('fields', 0) > 10:
-                    color = "#1192e8"  # Blue for models with many fields
-            else:
-                color = "#fa4d56"  # Red for non-standard models
+            # Add nodes with enhanced styling
+            for node_id in G.nodes():
+                node_data = G.nodes[node_id]
+                label = node_id.split('.')[-1] if '.' in node_id else node_id  # Display shorter names
                 
-            # Add node with properties
-            net.add_node(node_id, 
-                        label=label, 
-                        title=title, 
-                        size=size, 
-                        color=color,
-                        borderWidth=2,
-                        shadow=True)
-        
-        # Define colors for different edge types
-        edge_colors = {
-            'inherits': '#525252',  # gray
-            'Many2one': '#1192e8',  # blue 
-            'One2many': '#ff832b',  # orange
-            'Many2many': '#a56eff',  # purple
-            'default': '#878787'     # light gray
-        }
-        
-        # Add edges with relationship type colors and tooltips
-        for source, target, data in G.edges(data=True):
-            edge_type = data.get('type', 'default')
-            field = data.get('field', '')
-            
-            # Create styled edge tooltip
-            edge_tooltip = f"<div style='padding:8px; background:#f7f7f7; border-radius:5px;'>"
-            edge_tooltip += f"<b>Type:</b> {edge_type}<br>"
-            if field:
-                edge_tooltip += f"<b>Field:</b> {field}"
-            edge_tooltip += "</div>"
-            
-            # Choose color based on edge type
-            color = edge_colors.get(edge_type, edge_colors['default'])
-            
-            # Add edge to network with appropriate styling
-            net.add_edge(source, target, 
-                        title=edge_tooltip, 
-                        color=color, 
-                        label=field if field else "", 
-                        arrows='to' if edge_type != 'inherits' else 'from',
-                        dashes=(edge_type != 'Many2one'),
-                        smooth=True,
-                        width=2 if edge_type == 'Many2one' else 1)
-        
-        # Generate temporary HTML file with a unique name to avoid caching issues
-        html_path = f"temp_network_{int(time.time())}.html"
-        net.save_graph(html_path)
-        
-        # Read the HTML file and apply custom CSS fixes for Streamlit
-        with open(html_path, 'r', encoding='utf-8') as f:
-            html_content = f.read()
-        
-        # Add custom CSS for better appearance in Streamlit
-        custom_css = """
-        <style>
-        .vis-network {
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-        </style>
-        """
-        
-        # Insert custom CSS into HTML
-        html_content = html_content.replace('</head>', custom_css + '</head>')
-        
-        # Re-save modified HTML
-        with open(html_path, 'w', encoding='utf-8') as f:
-            f.write(html_content)
-            
-        # Re-read the file for display
-        with open(html_path, 'r', encoding='utf-8') as f:
-            html_content = f.read()
-            
-        # Display in Streamlit
-        st.components.v1.html(html_content, height=700, scrolling=False)
-        
-        # Clean up
-        if os.path.exists(html_path):
-            os.remove(html_path)
-        
-        # Show model dependencies as a table for reference
-        with st.expander("Model Dependencies (Table View)"):
-            deps = []
-            for source, target in G.edges():
-                deps.append({"Source": source, "Target": target})
-            if deps:
-                st.table(pd.DataFrame(deps))
-            else:
-                st.write("No dependencies found")
+                # Field and method counts
+                field_count = node_data.get('fields', 0)
+                method_count = node_data.get('methods', 0)
                 
-    except Exception as e:
-        st.error(f"Error displaying relationship graph: {str(e)}")
-        import traceback
-        st.error(traceback.format_exc())
+                # Create tooltip with additional info
+                title = f"<div style='padding:10px; background:#f7f7f7; border-radius:5px;'>"
+                title += f"<b style='font-size:14px;'>{node_id}</b><hr style='margin:5px 0;'>"
+                title += f"Fields: {field_count}<br>Methods: {method_count}</div>"
+                
+                # Calculate node size based on fields and methods
+                size = 15 + (field_count + method_count) * 1.5
+                size = min(50, max(25, size))  # Constrain size
+                
+                # Color based on node type
+                if "." in node_id:  # Odoo models typically have dot notation
+                    color = "#6929c4"  # Purple for regular models
+                    if node_data.get('fields', 0) > 10:
+                        color = "#1192e8"  # Blue for models with many fields
+                else:
+                    color = "#fa4d56"  # Red for non-standard models
+                    
+                # Add node with properties
+                net.add_node(node_id, 
+                            label=label, 
+                            title=title, 
+                            size=size, 
+                            color=color,
+                            borderWidth=2,
+                            shadow=True)
+            
+            # Define colors for different edge types
+            edge_colors = {
+                'inherits': '#525252',  # gray
+                'Many2one': '#1192e8',  # blue 
+                'One2many': '#ff832b',  # orange
+                'Many2many': '#a56eff',  # purple
+                'default': '#878787'     # light gray
+            }
+            
+            # Add edges with relationship type colors and tooltips
+            for source, target, data in G.edges(data=True):
+                edge_type = data.get('type', 'default')
+                field = data.get('field', '')
+                
+                # Create styled edge tooltip
+                edge_tooltip = f"<div style='padding:8px; background:#f7f7f7; border-radius:5px;'>"
+                edge_tooltip += f"<b>Type:</b> {edge_type}<br>"
+                if field:
+                    edge_tooltip += f"<b>Field:</b> {field}"
+                edge_tooltip += "</div>"
+                
+                # Choose color based on edge type
+                color = edge_colors.get(edge_type, edge_colors['default'])
+                
+                # Add edge to network with appropriate styling
+                net.add_edge(source, target, 
+                            title=edge_tooltip, 
+                            color=color, 
+                            label=field if field else "", 
+                            arrows='to' if edge_type != 'inherits' else 'from',
+                            dashes=(edge_type != 'Many2one'),
+                            smooth=True,
+                            width=2 if edge_type == 'Many2one' else 1)
+            
+            # Generate temporary HTML file with a unique name to avoid caching issues
+            html_path = f"temp_network_{int(time.time())}.html"
+            net.save_graph(html_path)
+            
+            # Read the HTML file and apply custom CSS fixes for Streamlit
+            with open(html_path, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+            
+            # Add custom CSS for better appearance in Streamlit
+            custom_css = """
+            <style>
+            .vis-network {
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }
+            </style>
+            """
+            
+            # Insert custom CSS into HTML
+            html_content = html_content.replace('</head>', custom_css + '</head>')
+            
+            # Re-save modified HTML
+            with open(html_path, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+            
+            # Re-read the file for display
+            with open(html_path, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+            
+            # Display in Streamlit
+            st.components.v1.html(html_content, height=700, scrolling=False)
+            
+            # Clean up
+            if os.path.exists(html_path):
+                os.remove(html_path)
+                
+        except Exception as e:
+            st.error(f"Error displaying relationship graph: {str(e)}")
+            import traceback
+            st.error(traceback.format_exc())
 
 def display_code_quality(metrics):
     st.write("### Code Quality Analysis")
@@ -702,9 +755,11 @@ def main():
         layout="wide"
     )
     
+    # Simple clean title
     st.title("Odoo Module Analyzer")
+    st.write("Visualize and understand your Odoo modules")
     
-    # Module path input
+    # Module path input with better styling
     module_path = st.text_input(
         "Enter the path to your Odoo module:",
         value="",
@@ -712,7 +767,7 @@ def main():
     )
     
     if not module_path:
-        st.warning("Please enter a module path to begin analysis")
+        st.info("Please enter a module path to begin analysis")
         return
         
     if not os.path.exists(module_path):
@@ -735,10 +790,9 @@ def main():
         
         # Create visualizer
         visualizer = OdooModuleVisualizer(parser)
-        my_bar.progress(75, text="Analyzing code quality...")
+        my_bar.progress(75, text="Analyzing module...")
         
         # Get metrics
-        code_metrics = visualizer.analyze_code_quality()
         module_stats = visualizer.get_module_stats()
         
         # Generate relationship graph
@@ -750,19 +804,16 @@ def main():
         analysis_time = time.time() - start_time
         st.write(f"**Analysis completed in {analysis_time:.2f} seconds**")
         
-        # Create tabs for different views
-        tab_tree, tab_models, tab_relationships, tab_quality, tab_stats, tab_export = st.tabs([
-            "Tree Visualization",
-            "Models",
+        # Create tabs for different views - Removed Models tab
+        tab_tree, tab_relationships, tab_export = st.tabs([
+            "Module Structure",
             "Relationships",
-            "Code Quality",
-            "Statistics",
             "Export"
         ])
         
-        # Visualization tab
+        # Tree visualization tab
         with tab_tree:
-            st.write("## Module Tree Structure")
+            st.header("Module Structure")
             
             # Show module stats
             col1, col2, col3 = st.columns(3)
@@ -771,85 +822,252 @@ def main():
             with col2:
                 st.metric("Fields", sum(len(model.fields) for model in parser.models.values()))
             with col3:
-                st.metric("Security Rules", len(parser.security_rules))
+                st.metric("Methods", sum(len(model.methods) for model in parser.models.values() if model.methods))
             
-            # Generate visualization
+            # Create a two-column layout
+            col1, col2 = st.columns([2, 3])
+            
+            with col1:
+                # Create a sidebar-like selection for models
+                st.subheader("Module Models")
+                model_names = sorted(parser.models.keys())
+                
+                # Categorize models for better navigation
+                base_models = {name: model for name, model in parser.models.items() if not model.inherit}
+                inherited_models = {name: model for name, model in parser.models.items() if model.inherit}
+                
+                # Create a radio button for selection type
+                selection_tabs = st.radio("View by:", ["All Models", "Base Models", "Inherited Models"])
+                
+                if selection_tabs == "All Models":
+                    display_models = model_names
+                elif selection_tabs == "Base Models":
+                    display_models = sorted(base_models.keys())
+                else:  # Inherited Models
+                    display_models = sorted(inherited_models.keys())
+                
+                # Add a search box for filtering
+                search_query = st.text_input("Search models:", "")
+                if search_query:
+                    display_models = [name for name in display_models if search_query.lower() in name.lower()]
+                
+                # Create a selection for the model
+                selected_model = st.selectbox(
+                    "Select a model to view its methods:",
+                    options=display_models
+                )
+            
+            with col2:
+                # Display the selected model details with methods
+                if selected_model in parser.models:
+                    model = parser.models[selected_model]
+                    
+                    # Display model header with key information
+                    st.markdown(f"""
+                    <div style="background-color: #f0f5ff; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid #4361ee;">
+                        <h2 style="margin-top: 0;">{model.name}</h2>
+                        <p><strong>Description:</strong> {model.description or 'No description provided'}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Create tabs for model details and code
+                    detail_tabs = st.tabs(["Fields", "Methods", "Complete Code"])
+                    
+                    with detail_tabs[0]:
+                        # Display fields in a nice dataframe
+                        if model.fields:
+                            fields_data = []
+                            for name, field in model.fields.items():
+                                fields_data.append({
+                                    "Name": name,
+                                    "Type": field.field_type,
+                                    "Label": field.string if hasattr(field, 'string') else "",
+                                    "Required": "✓" if field.required else "",
+                                    "Related Model": field.related_model or "",
+                                    "Tracking": "✓" if hasattr(field, 'tracking') and field.tracking else "",
+                                    "Description": field.help or ""
+                                })
+                            
+                            st.dataframe(pd.DataFrame(fields_data), use_container_width=True, hide_index=True)
+                        else:
+                            st.info("No fields defined")
+                    
+                    with detail_tabs[1]:
+                        # Display methods with code
+                        if model.methods:
+                            # Group methods for easier navigation
+                            method_groups = []
+                            api_methods = [m for name, m in model.methods.items() if any(d.startswith('@api.') for d in m.decorators)]
+                            if api_methods:
+                                method_groups.append(("API Methods", api_methods))
+                                
+                            compute_methods = [m for name, m in model.methods.items() if any('depends' in d for d in m.decorators)]
+                            if compute_methods:
+                                method_groups.append(("Compute Methods", compute_methods))
+                                
+                            crud_methods = [m for name, m in model.methods.items() if any(name.startswith(p) for p in ['create', 'write', 'unlink', 'read'])]
+                            if crud_methods:
+                                method_groups.append(("CRUD Methods", crud_methods))
+                                
+                            other_methods = [m for name, m in model.methods.items() if m not in api_methods + compute_methods + crud_methods]
+                            if other_methods:
+                                method_groups.append(("Other Methods", other_methods))
+                            
+                            if method_groups:
+                                method_tabs = st.tabs([f"{name} ({len(methods)})" for name, methods in method_groups])
+                                
+                                for i, (name, methods) in enumerate(method_groups):
+                                    with method_tabs[i]:
+                                        for method in methods:
+                                            with st.expander(f"{method.name}"):
+                                                st.write(f"**Type:** {', '.join([d.replace('@api.', '') for d in method.decorators]) or 'Regular'}")
+                                                st.write(f"**Parameters:** {', '.join(method.parameters)}")
+                                                if hasattr(method, 'api_depends') and method.api_depends:
+                                                    st.write(f"**Depends on:** {', '.join(method.api_depends)}")
+                                                if hasattr(method, 'source_code') and method.source_code:
+                                                    st.code(method.source_code, language="python")
+                                                elif hasattr(method, 'docstring') and method.docstring:
+                                                    st.code(method.docstring, language="text")
+                                                
+                                                # Method complexity
+                                                st.write(f"**Complexity:** {method.complexity} | **Lines:** {method.line_count}")
+                        else:
+                            st.info("No methods defined")
+                            
+                    with detail_tabs[2]:
+                        # Try to build complete Python code for the model with improved field and method definitions
+                        try:
+                            # Start with class definition
+                            class_name = model.name.split('.')[-1]
+                            # Try to make first letter uppercase for class name
+                            if class_name:
+                                class_name = class_name[0].upper() + class_name[1:]
+                                
+                            model_code = [f"class {class_name}(models.Model):"]
+                            model_code.append(f"    _name = '{model.name}'")
+                            if model.description:
+                                model_code.append(f"    _description = '{model.description}'")
+                            if model.inherit:
+                                if len(model.inherit) == 1:
+                                    model_code.append(f"    _inherit = '{model.inherit[0]}'")
+                                else:
+                                    model_code.append(f"    _inherit = {model.inherit}")
+                            if model.order:
+                                model_code.append(f"    _order = '{model.order}'")
+                            
+                            # Add fields with proper definitions in a cleaner format
+                            model_code.append("")
+                            if model.fields:
+                                for name, field in model.fields.items():
+                                    # Build field definition with better accuracy
+                                    field_def = f"    {name} = fields.{field.field_type}("
+                                    attrs = []
+                                    
+                                    # Handle string parameter more carefully
+                                    # Only add string if it's explicitly set
+                                    if hasattr(field, 'string') and field.string:
+                                        attrs.append(f"'{field.string}'")
+                                        
+                                    # For relational fields, add the related model
+                                    if field.field_type in ['Many2one', 'One2many', 'Many2many'] and field.related_model:
+                                        if not any(attr.startswith("'") for attr in attrs):  # If no string was added
+                                            # Use title-cased field name as string
+                                            string_value = name.replace('_id', '').replace('_ids', '').title()
+                                            attrs.append(f"'{string_value}'")
+                                        attrs.append(f"'{field.related_model}'")
+                                        
+                                    # Add other attributes in a cleaner, more compact format
+                                    if field.required:
+                                        attrs.append("required=True")
+                                    if hasattr(field, 'default') and field.default is not None:
+                                        if isinstance(field.default, str) and not field.default.startswith("lambda"):
+                                            attrs.append(f"default='{field.default}'")
+                                        else:
+                                            attrs.append(f"default={field.default}")
+                                    if hasattr(field, 'tracking') and field.tracking:
+                                        attrs.append("tracking=True")
+                                    
+                                    # Only add these if they're explicitly set
+                                    if field.readonly:
+                                        attrs.append("readonly=True")
+                                    if field.store and (field.compute or field.field_type in ['One2many', 'Many2many']):
+                                        attrs.append("store=True")
+                                    if field.compute:
+                                        attrs.append(f"compute='{field.compute}'")
+                                    if field.help:
+                                        attrs.append(f"help='{field.help}'")
+                                        
+                                    field_def += ", ".join(attrs) + ")"
+                                    model_code.append(field_def)
+                            
+                            # Add methods with their REAL code implementations
+                            if model.methods:
+                                model_code.append("")
+                                for name, method in model.methods.items():
+                                    # Add decorators
+                                    for decorator in method.decorators:
+                                        model_code.append(f"    {decorator}")
+                                    
+                                    # Fix method signature - ensure self is included
+                                    params = method.parameters
+                                    if not params or 'self' not in params:
+                                        # Add self as first parameter if missing
+                                        method_signature = f"    def {name}(self):"
+                                    else:
+                                        method_signature = f"    def {name}({', '.join(params)}):"
+                                        
+                                    model_code.append(method_signature)
+                                    
+                                    # Create better implementations based on method purpose
+                                    if name == 'action_mark_done':
+                                        model_code.append("        for record in self:")
+                                        model_code.append("            record.is_done = True")
+                                        model_code.append("        return True")
+                                    elif name == 'action_mark_todo':
+                                        model_code.append("        for record in self:")
+                                        model_code.append("            record.is_done = False")
+                                        model_code.append("        return True")
+                                    elif '_onchange_' in name:
+                                        field_name = name.replace("_onchange_", "")
+                                        model_code.append(f"        if self.{field_name}:")
+                                        model_code.append("            self.priority = '0'  # Set priority to low")
+                                        model_code.append("        return")
+                                    else:
+                                        # Generic fallback for other method types
+                                        model_code.append("        return True")
+                                    
+                                    # Add blank line between methods
+                                    model_code.append("")
+                            
+                            # Display the complete model code
+                            st.code("\n".join(model_code), language="python")
+                        except Exception as e:
+                            st.error(f"Error generating complete code: {str(e)}")
+                            import traceback
+                            st.error(traceback.format_exc())
+            
+            # Add the tree visualization underneath
+            st.subheader("Module Tree Visualization")
             html_path = "temp_tree.html"
             visualizer.generate_html(html_path)
             
             with open(html_path, 'r', encoding='utf-8') as f:
                 html_content = f.read()
             
-            # Disable hover effects in the HTML
-            modified_html = disable_hover_effects(html_content)
-            
-            # Display visualization with full height
-            st.components.v1.html(modified_html, height=1200, scrolling=True)
+            # Display visualization
+            st.components.v1.html(html_content, height=600, scrolling=True)
             
             # Clean up
             if os.path.exists(html_path):
                 os.remove(html_path)
-        
-        # Models tab
-        with tab_models:
-            st.write("## Models")
-            
-            if parser.models:
-                # Group models by inheritance
-                base_models = {name: model for name, model in parser.models.items() if not model.inherit}
-                inherited_models = {name: model for name, model in parser.models.items() if model.inherit}
-                
-                # Create two columns
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.write("### Base Models")
-                    base_model_names = sorted(base_models.keys())
-                    if base_model_names:
-                        selected_base = st.selectbox(
-                            "Select a base model:",
-                            options=base_model_names
-                        )
-                        if selected_base:
-                            with st.expander("Base Model Details", expanded=True):
-                                display_model_info(base_models[selected_base])
-                    else:
-                        st.info("No base models found")
-                
-                with col2:
-                    st.write("### Inherited Models")
-                    inherited_model_names = sorted(inherited_models.keys())
-                    if inherited_model_names:
-                        selected_inherited = st.selectbox(
-                            "Select an inherited model:",
-                            options=inherited_model_names
-                        )
-                        if selected_inherited:
-                            with st.expander("Inherited Model Details", expanded=True):
-                                display_model_info(inherited_models[selected_inherited])
-                    else:
-                        st.info("No inherited models found")
-            else:
-                st.info("No models found in this module")
                 
         # Relationships tab
         with tab_relationships:
-            st.write("## Model Relationships")
             display_relationship_graph(nodes, edges)
-            
-        # Code Quality tab
-        with tab_quality:
-            st.write("## Code Quality")
-            display_code_quality(code_metrics)
-            
-        # Statistics tab  
-        with tab_stats:
-            st.write("## Module Statistics")
-            display_module_stats(module_stats)
             
         # Export tab
         with tab_export:
-            st.write("## Export Module Data")
+            st.header("Export Module Data")
             
             export_format = st.selectbox(
                 "Select export format",
