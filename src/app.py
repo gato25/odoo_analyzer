@@ -433,7 +433,7 @@ def display_relationship_graph(nodes, edges):
             # Add edges
             for edge in edges:
                 G.add_edge(edge['from'], edge['to'], 
-                          type=edge.get('type', ''),
+                          type=edge.get('type', 'default'),
                           label=edge.get('label', ''),
                           field=edge.get('field', ''))
             
@@ -815,127 +815,224 @@ def main():
         with tab_tree:
             st.header("Module Structure")
             
-            # Show module stats
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Models", len(parser.models))
-            with col2:
-                st.metric("Fields", sum(len(model.fields) for model in parser.models.values()))
-            with col3:
-                st.metric("Methods", sum(len(model.methods) for model in parser.models.values() if model.methods))
+            # Add CSS for better styling
+            st.markdown("""
+            <style>
+            .model-card {
+                background-color: #f8f9fa;
+                border-left: 3px solid #4361ee;
+                border-radius: 5px;
+                padding: 15px;
+                margin-bottom: 15px;
+            }
+            .stTabs [data-baseweb="tab-panel"] {
+                padding-top: 1rem;
+            }
+            .stExpander {
+                border: none;
+                box-shadow: none;
+            }
+            .compact-metric {
+                text-align: center;
+                background: #f1f3f9;
+                padding: 10px;
+                border-radius: 5px;
+                margin-bottom: 10px;
+            }
+            .tree-container {
+                border: 1px solid #eee;
+                border-radius: 5px;
+                padding: 10px;
+                background: white;
+                box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            }
+            .model-selector {
+                background: #f8f9fa;
+                padding: 15px;
+                border-radius: 5px;
+                margin-bottom: 15px;
+            }
+            </style>
+            """, unsafe_allow_html=True)
             
-            # Create a two-column layout
-            col1, col2 = st.columns([2, 3])
+            # Show module stats in a more compact way
+            cols = st.columns(4)
+            with cols[0]:
+                st.markdown(f"""<div class="compact-metric"><h3>{len(parser.models)}</h3>Models</div>""", unsafe_allow_html=True)
+            with cols[1]:
+                st.markdown(f"""<div class="compact-metric"><h3>{sum(len(model.fields) for model in parser.models.values())}</h3>Fields</div>""", unsafe_allow_html=True)
+            with cols[2]:
+                st.markdown(f"""<div class="compact-metric"><h3>{sum(len(model.methods) for model in parser.models.values() if model.methods)}</h3>Methods</div>""", unsafe_allow_html=True)
+            with cols[3]:
+                method_count = sum(1 for model in parser.models.values() 
+                                  for method in model.methods.values() 
+                                  if any(d.startswith('@api.') for d in method.decorators))
+                st.markdown(f"""<div class="compact-metric"><h3>{method_count}</h3>API Methods</div>""", unsafe_allow_html=True)
+            
+            # Create a more efficient two-column layout
+            col1, col2 = st.columns([1, 3])
             
             with col1:
-                # Create a sidebar-like selection for models
-                st.subheader("Module Models")
+                # Create a more compact sidebar-like selection for models
+                st.markdown('<div class="model-selector">', unsafe_allow_html=True)
+                st.subheader("Models")
                 model_names = sorted(parser.models.keys())
                 
                 # Categorize models for better navigation
                 base_models = {name: model for name, model in parser.models.items() if not model.inherit}
                 inherited_models = {name: model for name, model in parser.models.items() if model.inherit}
                 
-                # Create a radio button for selection type
-                selection_tabs = st.radio("View by:", ["All Models", "Base Models", "Inherited Models"])
+                # Create tabs for model categories instead of radio buttons
+                model_tabs = st.tabs(["All", "Base", "Inherited"])
                 
-                if selection_tabs == "All Models":
+                with model_tabs[0]:
                     display_models = model_names
-                elif selection_tabs == "Base Models":
-                    display_models = sorted(base_models.keys())
-                else:  # Inherited Models
-                    display_models = sorted(inherited_models.keys())
+                    # Add a search box for filtering
+                    search_query = st.text_input("Search:", "", key="search_all")
+                    if search_query:
+                        display_models = [name for name in display_models if search_query.lower() in name.lower()]
+                    
+                    # Group models by module
+                    module_groups = {}
+                    for name in display_models:
+                        module = name.split('.')[0] if '.' in name else 'Other'
+                        if module not in module_groups:
+                            module_groups[module] = []
+                        module_groups[module].append(name)
+                    
+                    # Display in compact expandable groups
+                    for module, models in sorted(module_groups.items()):
+                        with st.expander(f"{module} ({len(models)})", expanded=len(module_groups) <= 3):
+                            for model in sorted(models):
+                                if st.button(model.split('.')[-1], key=f"btn_{model}", help=model, use_container_width=True):
+                                    st.session_state.selected_model = model
+                                
+                with model_tabs[1]:
+                    base_names = sorted(base_models.keys())
+                    search_query = st.text_input("Search:", "", key="search_base")
+                    if search_query:
+                        base_names = [name for name in base_names if search_query.lower() in name.lower()]
+                    
+                    for name in base_names:
+                        if st.button(name.split('.')[-1], key=f"btn_base_{name}", help=name, use_container_width=True):
+                            st.session_state.selected_model = name
+                            
+                with model_tabs[2]:
+                    inherited_names = sorted(inherited_models.keys())
+                    search_query = st.text_input("Search:", "", key="search_inherited")
+                    if search_query:
+                        inherited_names = [name for name in inherited_names if search_query.lower() in name.lower()]
+                    
+                    for name in inherited_names:
+                        if st.button(name.split('.')[-1], key=f"btn_inherited_{name}", help=name, use_container_width=True):
+                            st.session_state.selected_model = name
                 
-                # Add a search box for filtering
-                search_query = st.text_input("Search models:", "")
-                if search_query:
-                    display_models = [name for name in display_models if search_query.lower() in name.lower()]
-                
-                # Create a selection for the model
-                selected_model = st.selectbox(
-                    "Select a model to view its methods:",
-                    options=display_models
-                )
+                st.markdown('</div>', unsafe_allow_html=True)
             
             with col2:
+                # Initialize selected model in session state if not present
+                if 'selected_model' not in st.session_state:
+                    st.session_state.selected_model = model_names[0] if model_names else None
+                
                 # Display the selected model details with methods
-                if selected_model in parser.models:
-                    model = parser.models[selected_model]
+                if st.session_state.selected_model in parser.models:
+                    model = parser.models[st.session_state.selected_model]
                     
                     # Display model header with key information
                     st.markdown(f"""
-                    <div style="background-color: #f0f5ff; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid #4361ee;">
+                    <div class="model-card">
                         <h2 style="margin-top: 0;">{model.name}</h2>
                         <p><strong>Description:</strong> {model.description or 'No description provided'}</p>
+                        <div style="display: flex; gap: 20px; margin-top: 10px;">
+                            <div><strong>Fields:</strong> {len(model.fields) if model.fields else 0}</div>
+                            <div><strong>Methods:</strong> {len(model.methods) if model.methods else 0}</div>
+                            <div><strong>Inherits:</strong> {', '.join(model.inherit) if model.inherit else 'None'}</div>
+                        </div>
                     </div>
                     """, unsafe_allow_html=True)
                     
                     # Create tabs for model details and code
-                    detail_tabs = st.tabs(["Fields", "Methods", "Complete Code"])
+                    detail_tabs = st.tabs(["Fields", "Methods", "Code"])
                     
                     with detail_tabs[0]:
-                        # Display fields in a nice dataframe
+                        # Display fields in a nice dataframe with filtering
                         if model.fields:
+                            # Add filter options for field types
+                            field_types = sorted(set(field.field_type for field in model.fields.values()))
+                            selected_types = st.multiselect("Filter by type:", field_types, default=field_types)
+                            
                             fields_data = []
                             for name, field in model.fields.items():
-                                fields_data.append({
-                                    "Name": name,
-                                    "Type": field.field_type,
-                                    "Label": field.string if hasattr(field, 'string') else "",
-                                    "Required": "✓" if field.required else "",
-                                    "Related Model": field.related_model or "",
-                                    "Tracking": "✓" if hasattr(field, 'tracking') and field.tracking else "",
-                                    "Description": field.help or ""
-                                })
+                                if field.field_type in selected_types:
+                                    fields_data.append({
+                                        "Name": name,
+                                        "Type": field.field_type,
+                                        "Label": field.string if hasattr(field, 'string') else "",
+                                        "Required": "✓" if field.required else "",
+                                        "Related Model": field.related_model or "",
+                                        "Tracking": "✓" if hasattr(field, 'tracking') and field.tracking else "",
+                                        "Description": field.help or ""
+                                    })
                             
                             st.dataframe(pd.DataFrame(fields_data), use_container_width=True, hide_index=True)
                         else:
                             st.info("No fields defined")
                     
                     with detail_tabs[1]:
-                        # Display methods with code
+                        # Display methods with code in a more compact way
                         if model.methods:
                             # Group methods for easier navigation
-                            method_groups = []
-                            api_methods = [m for name, m in model.methods.items() if any(d.startswith('@api.') for d in m.decorators)]
-                            if api_methods:
-                                method_groups.append(("API Methods", api_methods))
-                                
-                            compute_methods = [m for name, m in model.methods.items() if any('depends' in d for d in m.decorators)]
-                            if compute_methods:
-                                method_groups.append(("Compute Methods", compute_methods))
-                                
-                            crud_methods = [m for name, m in model.methods.items() if any(name.startswith(p) for p in ['create', 'write', 'unlink', 'read'])]
-                            if crud_methods:
-                                method_groups.append(("CRUD Methods", crud_methods))
-                                
-                            other_methods = [m for name, m in model.methods.items() if m not in api_methods + compute_methods + crud_methods]
-                            if other_methods:
-                                method_groups.append(("Other Methods", other_methods))
+                            method_groups = {
+                                "API": [m for name, m in model.methods.items() if any(d.startswith('@api.') for d in m.decorators)],
+                                "Compute": [m for name, m in model.methods.items() if any('depends' in d for d in m.decorators)],
+                                "CRUD": [m for name, m in model.methods.items() if any(name.startswith(p) for p in ['create', 'write', 'unlink', 'read'])],
+                                "Other": []
+                            }
                             
-                            if method_groups:
-                                method_tabs = st.tabs([f"{name} ({len(methods)})" for name, methods in method_groups])
+                            # Add methods to Other if not in any other category
+                            for name, method in model.methods.items():
+                                if method not in method_groups["API"] + method_groups["Compute"] + method_groups["CRUD"]:
+                                    method_groups["Other"].append(method)
+                            
+                            # Only show categories that have methods
+                            valid_groups = {name: methods for name, methods in method_groups.items() if methods}
+                            
+                            if valid_groups:
+                                method_tabs = st.tabs([f"{name} ({len(methods)})" for name, methods in valid_groups.items()])
                                 
-                                for i, (name, methods) in enumerate(method_groups):
+                                for i, (name, methods) in enumerate(valid_groups.items()):
                                     with method_tabs[i]:
-                                        for method in methods:
-                                            with st.expander(f"{method.name}"):
-                                                st.write(f"**Type:** {', '.join([d.replace('@api.', '') for d in method.decorators]) or 'Regular'}")
-                                                st.write(f"**Parameters:** {', '.join(method.parameters)}")
+                                        # Search filter for methods
+                                        search_method = st.text_input(f"Search {name} methods:", key=f"search_{name}")
+                                        filtered_methods = [m for m in methods if (not search_method or 
+                                                            search_method.lower() in m.name.lower())]
+                                        
+                                        if not filtered_methods:
+                                            st.info(f"No {name} methods matching '{search_method}'")
+                                        
+                                        for method in filtered_methods:
+                                            with st.expander(f"{method.name} ({method.line_count} lines)"):
+                                                # More compact method info
+                                                st.markdown(f"""
+                                                <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px;">
+                                                    <div><strong>Type:</strong> {', '.join([d.replace('@api.', '') for d in method.decorators]) or 'Regular'}</div>
+                                                    <div><strong>Params:</strong> {', '.join(method.parameters)}</div>
+                                                    <div><strong>Complexity:</strong> {method.complexity}</div>
+                                                </div>
+                                                """, unsafe_allow_html=True)
+                                                
                                                 if hasattr(method, 'api_depends') and method.api_depends:
-                                                    st.write(f"**Depends on:** {', '.join(method.api_depends)}")
+                                                    st.markdown(f"**Depends on:** {', '.join(method.api_depends)}")
+                                                
                                                 if hasattr(method, 'source_code') and method.source_code:
                                                     st.code(method.source_code, language="python")
                                                 elif hasattr(method, 'docstring') and method.docstring:
                                                     st.code(method.docstring, language="text")
-                                                
-                                                # Method complexity
-                                                st.write(f"**Complexity:** {method.complexity} | **Lines:** {method.line_count}")
                         else:
                             st.info("No methods defined")
                             
                     with detail_tabs[2]:
-                        # Try to build complete Python code for the model with improved field and method definitions
+                        # Improved code display with syntax highlighting
                         try:
                             # Start with class definition
                             class_name = model.name.split('.')[-1]
@@ -964,19 +1061,17 @@ def main():
                                     attrs = []
                                     
                                     # Handle string parameter more carefully
-                                    # Only add string if it's explicitly set
                                     if hasattr(field, 'string') and field.string:
                                         attrs.append(f"'{field.string}'")
                                         
                                     # For relational fields, add the related model
                                     if field.field_type in ['Many2one', 'One2many', 'Many2many'] and field.related_model:
-                                        if not any(attr.startswith("'") for attr in attrs):  # If no string was added
-                                            # Use title-cased field name as string
+                                        if not any(attr.startswith("'") for attr in attrs):
                                             string_value = name.replace('_id', '').replace('_ids', '').title()
                                             attrs.append(f"'{string_value}'")
                                         attrs.append(f"'{field.related_model}'")
                                         
-                                    # Add other attributes in a cleaner, more compact format
+                                    # Add other attributes in a cleaner format
                                     if field.required:
                                         attrs.append("required=True")
                                     if hasattr(field, 'default') and field.default is not None:
@@ -1000,7 +1095,7 @@ def main():
                                     field_def += ", ".join(attrs) + ")"
                                     model_code.append(field_def)
                             
-                            # Add methods with their REAL code implementations
+                            # Add methods with their code implementations
                             if model.methods:
                                 model_code.append("")
                                 for name, method in model.methods.items():
@@ -1011,30 +1106,34 @@ def main():
                                     # Fix method signature - ensure self is included
                                     params = method.parameters
                                     if not params or 'self' not in params:
-                                        # Add self as first parameter if missing
                                         method_signature = f"    def {name}(self):"
                                     else:
                                         method_signature = f"    def {name}({', '.join(params)}):"
                                         
                                     model_code.append(method_signature)
                                     
-                                    # Create better implementations based on method purpose
-                                    if name == 'action_mark_done':
-                                        model_code.append("        for record in self:")
-                                        model_code.append("            record.is_done = True")
-                                        model_code.append("        return True")
-                                    elif name == 'action_mark_todo':
-                                        model_code.append("        for record in self:")
-                                        model_code.append("            record.is_done = False")
-                                        model_code.append("        return True")
-                                    elif '_onchange_' in name:
-                                        field_name = name.replace("_onchange_", "")
-                                        model_code.append(f"        if self.{field_name}:")
-                                        model_code.append("            self.priority = '0'  # Set priority to low")
-                                        model_code.append("        return")
+                                    # Add implementation if available, otherwise use placeholders
+                                    if hasattr(method, 'source_code') and method.source_code:
+                                        # Extract method body indentation
+                                        method_body = "\n".join(["        " + line for line in 
+                                                              method.source_code.split("\n")[1:]])
+                                        model_code.append(method_body)
                                     else:
-                                        # Generic fallback for other method types
-                                        model_code.append("        return True")
+                                        if name == 'action_mark_done':
+                                            model_code.append("        for record in self:")
+                                            model_code.append("            record.is_done = True")
+                                            model_code.append("        return True")
+                                        elif name == 'action_mark_todo':
+                                            model_code.append("        for record in self:")
+                                            model_code.append("            record.is_done = False")
+                                            model_code.append("        return True")
+                                        elif '_onchange_' in name:
+                                            field_name = name.replace("_onchange_", "")
+                                            model_code.append(f"        if self.{field_name}:")
+                                            model_code.append("            self.priority = '0'  # Set priority to low")
+                                            model_code.append("        return")
+                                        else:
+                                            model_code.append("        return True")
                                     
                                     # Add blank line between methods
                                     model_code.append("")
@@ -1046,16 +1145,76 @@ def main():
                             import traceback
                             st.error(traceback.format_exc())
             
-            # Add the tree visualization underneath
+            # Add the improved tree visualization underneath
             st.subheader("Module Tree Visualization")
+            st.markdown('<div class="tree-container">', unsafe_allow_html=True)
+            
+            # Generate a more compact tree visualization
             html_path = "temp_tree.html"
+            
+            # Customize the tree visualization options before generating
+            visualizer.tree_options = {
+                "height": "500px",
+                "width": "100%",
+                "levelsToExpand": 1,
+                "compact": True,
+                "nodeSize": {
+                    "width": 200,
+                    "height": 40
+                },
+                "connectors": {
+                    "type": "straight",
+                    "style": {
+                        "stroke-width": "2px",
+                        "stroke": "#ccc"
+                    }
+                },
+                "node": {
+                    "HTMLclass": "compact-node",
+                    "collapsable": True
+                }
+            }
+            
             visualizer.generate_html(html_path)
             
             with open(html_path, 'r', encoding='utf-8') as f:
                 html_content = f.read()
+                
+            # Modify the HTML content to make the tree more compact
+            html_content = html_content.replace('<div class="chart"', 
+                                           '<div class="chart compact-chart"')
+            
+            # Add custom CSS to make the tree more compact and cleaner
+            custom_css = """
+            <style>
+            .compact-chart {
+                font-size: 12px;
+            }
+            .compact-node {
+                border: 1px solid #ddd !important;
+                padding: 5px !important;
+                border-radius: 4px !important;
+                background: #f8f9fa !important;
+            }
+            .node-collapse-icon {
+                font-size: 14px !important;
+                width: 16px !important;
+                height: 16px !important;
+                line-height: 16px !important;
+            }
+            .compact-chart .node-name {
+                font-weight: bold;
+                font-size: 13px;
+            }
+            </style>
+            """
+            
+            # Insert custom CSS into HTML
+            html_content = html_content.replace('</head>', custom_css + '</head>')
             
             # Display visualization
-            st.components.v1.html(html_content, height=600, scrolling=True)
+            st.components.v1.html(html_content, height=500, scrolling=False)
+            st.markdown('</div>', unsafe_allow_html=True)
             
             # Clean up
             if os.path.exists(html_path):
@@ -1078,7 +1237,77 @@ def main():
                 if export_format == "JSON":
                     # Export to JSON
                     export_path = "module_data.json"
-                    visualizer.export_module_data(export_path)
+                    
+                    # Create a simplified serializable version of the data
+                    serializable_data = {}
+                    
+                    # Add basic module info
+                    serializable_data["module_name"] = os.path.basename(module_path)
+                    serializable_data["module_path"] = module_path
+                    serializable_data["analysis_time"] = f"{analysis_time:.2f} seconds"
+                    
+                    # Add models with their fields and methods
+                    serializable_data["models"] = {}
+                    for name, model in parser.models.items():
+                        model_data = {
+                            "name": name,
+                            "description": model.description,
+                            "inherit": model.inherit if hasattr(model, "inherit") else [],
+                            "order": model.order if hasattr(model, "order") else "",
+                            "fields": {},
+                            "methods": {}
+                        }
+                        
+                        # Add fields
+                        if hasattr(model, "fields") and model.fields:
+                            for field_name, field in model.fields.items():
+                                field_data = {
+                                    "name": field_name,
+                                    "type": field.field_type,
+                                    "required": field.required if hasattr(field, "required") else False,
+                                    "readonly": field.readonly if hasattr(field, "readonly") else False,
+                                    "store": field.store if hasattr(field, "store") else True,
+                                    "compute": field.compute if hasattr(field, "compute") else None,
+                                    "related_model": field.related_model if hasattr(field, "related_model") else None,
+                                    "help": field.help if hasattr(field, "help") else None
+                                }
+                                
+                                # Add other attributes if they exist
+                                if hasattr(field, "string"):
+                                    field_data["string"] = field.string
+                                if hasattr(field, "default"):
+                                    field_data["default"] = str(field.default)
+                                if hasattr(field, "tracking"):
+                                    field_data["tracking"] = field.tracking
+                                
+                                model_data["fields"][field_name] = field_data
+                        
+                        # Add methods
+                        if hasattr(model, "methods") and model.methods:
+                            for method_name, method in model.methods.items():
+                                method_data = {
+                                    "name": method_name,
+                                    "decorators": list(method.decorators) if hasattr(method, "decorators") else [],
+                                    "parameters": list(method.parameters) if hasattr(method, "parameters") else [],
+                                    "complexity": method.complexity if hasattr(method, "complexity") else 0,
+                                    "line_count": method.line_count if hasattr(method, "line_count") else 0
+                                }
+                                
+                                # Add docstring and source_code if they exist
+                                if hasattr(method, "docstring"):
+                                    method_data["docstring"] = method.docstring
+                                if hasattr(method, "source_code"):
+                                    method_data["source_code"] = method.source_code
+                                if hasattr(method, "api_depends"):
+                                    method_data["api_depends"] = list(method.api_depends)
+                                
+                                model_data["methods"][method_name] = method_data
+                        
+                        serializable_data["models"][name] = model_data
+                    
+                    # Write the serializable data to a JSON file
+                    with open(export_path, 'w') as f:
+                        json.dump(serializable_data, f, indent=2)
                     
                     # Offer for download
                     with open(export_path, 'r') as f:
@@ -1094,7 +1323,7 @@ def main():
                     # Clean up
                     if os.path.exists(export_path):
                         os.remove(export_path)
-                        
+                    
                 elif export_format == "HTML Report":
                     st.info("HTML Report export coming soon!")
                 

@@ -226,8 +226,8 @@ class OdooModuleParser:
                 method_name = item.name
                 
                 # Skip private methods
-                if method_name.startswith('_') and method_name not in ['_compute_', '_inverse_', '_search_']:
-                    continue
+                # if method_name.startswith('_') and method_name not in ['_compute_', '_inverse_', '_search_']:
+                #     continue
                     
                 method = OdooMethod(name=method_name)
                 
